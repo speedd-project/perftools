@@ -1,0 +1,34 @@
+# use glob syntax.
+syntax: glob
+
+*.ser
+*.class
+*~
+*.bak
+*.old
+
+# eclipse conf file
+.settings
+.classpath
+.manager
+
+# building
+target
+build
+null
+tmp*
+temp*
+test-output
+build.log
+
+# other
+tmp
+*.swp
+! .gitkeep
+*.log
+.directory
+*.result
+*.counts
+*.fg
+*.description
+
