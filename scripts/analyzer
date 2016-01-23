@@ -1,0 +1,15 @@
+#!/bin/bash
+
+if [ -z ${BASE_DIR+x} ];
+then
+	BASE_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd );
+fi
+
+if [ -z $CLASSPATH ];
+then
+	CLASSPATH="$BASE_DIR/target/perftools-0.0.1-SNAPSHOT-jar-with-dependencies.jar"
+else
+	CLASSPATH="$CLASSPATH;$BASE_DIR/target/perftools-0.0.1-SNAPSHOT-jar-with-dependencies.jar"
+fi
+
+java -Dorg.slf4j.simplelogger.defaultlog=error -cp $CLASSPATH org.speedd.perf.Analyzer $@
