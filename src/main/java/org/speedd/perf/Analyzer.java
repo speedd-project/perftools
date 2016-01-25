@@ -47,16 +47,16 @@ public class Analyzer {
 
 		@Override
 		public void run() {
-			System.out.println("Starting thread " + threadId + " for topic " + topic);
+			System.err.println("Starting thread " + threadId + " for topic " + topic);
 			
 	        ConsumerIterator<byte[], byte[]> it = stream.iterator();
 	        while (it.hasNext()) {
 	        	long timestamp = System.currentTimeMillis();
 	        	String message = new String(it.next().message());
-	        	System.out.println(timestamp + " : " + message);
+	        	System.out.println(timestamp + ":" + message);
 	        }
 	            
-	        System.out.println("Shutting down thread: " + threadId + " for topic " + topic);
+	        System.err.println("Shutting down thread: " + threadId + " for topic " + topic);
 		}
 		
 	}
