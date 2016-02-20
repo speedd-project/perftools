@@ -35,6 +35,10 @@ public class Stats {
 	
 	private ArrayList<Long> processingLatencies;
 	
+	private ArrayList<Long> inLatencies;
+	
+	private ArrayList<Long> outLatencies;
+	
 	private long earliestInEventTimestamp;
 	
 	private long latestInEventTimestamp;
@@ -44,6 +48,8 @@ public class Stats {
 	private long startTimestamp;
 	
 	private EventMetadata eventMetadata;
+	
+	private HashMap<String, ArrayList<Long>> e2eLatenciesPerType;
 	
 	protected EventMetadata getEventMetadata() {
 		return eventMetadata;
@@ -99,9 +105,35 @@ public class Stats {
 		
 		return processingLatencies.get(percentileIndex);
 	}
+	
+	public long getInLatency(float percentile){
+		int percentileIndex = (int) (long) Math.round(inLatencies.size() * percentile)-1;
+		
+		return inLatencies.get(percentileIndex);
+	}
 
+	public long getPerTypeLatency(String type, float percentile){
+		ArrayList<Long> e2eLatenciesForType = e2eLatenciesPerType.get(type);
+		
+		int percentileIndex = (int) (long) Math.round(e2eLatenciesForType.size() * percentile)-1;
+		
+		return e2eLatenciesForType.get(percentileIndex);
+	}
+	
 	public double getAvgInRate(){
 		return 1000 * (numOfInEvents - 1) / (latestInEventTimestamp - earliestInEventTimestamp);
+	}
+
+	private ArrayList<Long> getE2ELatenciesForType(Event event){
+		String eventName = event.getEventName();
+		
+		ArrayList<Long> e2eLatenciesForType = e2eLatenciesPerType.get(eventName);
+		if(e2eLatenciesForType == null) {
+			e2eLatenciesForType = new ArrayList<Long>();
+			e2eLatenciesPerType.put(eventName, e2eLatenciesForType);
+		}
+
+		return e2eLatenciesForType;
 	}
 	
 	private void updateLatencies(Event event, long eventTimestamp){
@@ -110,6 +142,8 @@ public class Stats {
 		if(contributingEvents.length == 0){
 			return;
 		}
+		
+		ArrayList<Long> e2eLatenciesForType = getE2ELatenciesForType(event);
 		
 		long latestContributingInEventTimestamp = 0;
 		
@@ -126,6 +160,7 @@ public class Stats {
 			Long latency = eventTimestamp - latestContributingInEventTimestamp;
 			
 			e2eLatencies.add(latency);
+			e2eLatenciesForType.add(latency);
 		}
 
 		//update processing latencies
@@ -141,6 +176,7 @@ public class Stats {
 		
 		Long internalLatency = internalTimestamp - latestContributingInternalTimestamp;
 		processingLatencies.add(internalLatency);
+		
 	}
 
 	private void updateInEventMetrics(Event event, long timestamp){
@@ -186,6 +222,12 @@ public class Stats {
 		
 		processingLatencies = new ArrayList<Long>();
 		
+		inLatencies = new ArrayList<Long>();
+		
+		outLatencies = new ArrayList<Long>();
+		
+		e2eLatenciesPerType = new HashMap<String, ArrayList<Long>>();
+		
 		JsonEventDecoder decoder = new JsonEventDecoder();
 		
 		do {
@@ -203,11 +245,15 @@ public class Stats {
 			}
 			
 			if(isJSON(eventEntry[1])){
+				//events emitted by speedd runtime are in JSON format (opposite to raw events which are csv)
 				Event event = decoder.fromBytes(eventEntry[1].trim().getBytes());
 				
 				if(event.getAttributes().containsKey("timestamps")){
+					//derived event - update latencies regarding the contributing events
 					updateLatencies(event, timestamp);
-				} 
+				} else {
+					updateLatenciesForRawEvents(event, timestamp);
+				}
 			} else {
 				//input (csv) event
 					//input event - does not contain 'timestamps' - use to compute real rates
@@ -220,9 +266,26 @@ public class Stats {
 		
 		Collections.sort(e2eLatencies);
 		Collections.sort(processingLatencies);
-		
+		Collections.sort(inLatencies);
+		Collections.sort(outLatencies);
+		for (String type : e2eLatenciesPerType.keySet()) {
+			Collections.sort(e2eLatenciesPerType.get(type));
+		}
 	}
 	
+	private void updateLatenciesForRawEvents(Event event, long timestamp) {
+		//Only input latency is known for raw events - their detected time is set during deserialization in kafka spout
+		long detectedTime = event.getTimestamp();
+		long inputPhaseLatency = detectedTime - timestamp;
+		inLatencies.add(inputPhaseLatency);
+		
+		ArrayList<Long> e2eLatenciesForType = getE2ELatenciesForType(event);
+		Long inTimestamp = timestamps.get(getEventId(event));
+		if(inTimestamp != null){
+			e2eLatenciesForType.add(timestamp - inTimestamp);
+		}
+	}
+
 	public long getNumOfInEvents(){
 		return numOfInEvents;
 	}
@@ -268,6 +331,12 @@ public class Stats {
 			
 			System.out.println(String.format("%.1f%% End-to-end latency: %d ms", percentile * 100, stats.getLatency(percentile)));
 			System.out.println(String.format("%.1f%% Processing latency: %d ms", percentile * 100, stats.getProcessingLatency(percentile)));
+			
+			System.out.println(String.format("%.1f%% End-to-end latencies per event type:", percentile * 100));
+			for (String type : stats.e2eLatenciesPerType.keySet()) {
+				System.out.println(String.format("%s: %d ms", type, stats.getPerTypeLatency(type, percentile)));
+			}
+			System.out.println(String.format("%.1f%% Input phase latency: %d ms", percentile * 100, stats.getInLatency(percentile)));
 			System.out.println(String.format("Num of input events: %d, average rate: %f events/sec", stats.numOfInEvents, stats.getAvgInRate() ));
 			
 		} catch (ParseException pe){

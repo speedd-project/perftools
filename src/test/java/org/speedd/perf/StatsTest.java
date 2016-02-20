@@ -21,6 +21,7 @@ public class StatsTest {
 		assertEquals(48, stats.getNumOfInEvents());
 		
 		assertEquals(3.0, stats.getAvgInRate(), 1E-4);
+		
 	}
 	
 }
