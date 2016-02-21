@@ -32,6 +32,8 @@ public class Stats {
 		public String eventId;
 		public long processingLatency;
 		public long e2eLatency;
+		public Long outLatency;
+		public long inLatency;
 	}
 	
 	public static final String USAGE = "USAGE: stats -p <percentile> [-s <start offset timestamp>] [-f <file>]";
@@ -126,6 +128,12 @@ public class Stats {
 		return inLatencies.get(percentileIndex);
 	}
 
+	public long getOutLatency(float percentile){
+		int percentileIndex = (int) (long) Math.round(outLatencies.size() * percentile)-1;
+		
+		return outLatencies.get(percentileIndex);
+	}
+
 	public long getPerTypeLatency(String type, float percentile){
 		ArrayList<Long> e2eLatenciesForType = e2eLatenciesPerType.get(type);
 		
@@ -180,7 +188,11 @@ public class Stats {
 			e2eLatencies.add(latency);
 			e2eLatenciesForType.add(latency);
 			
+			Long outLatency = eventTimestamp - event.getTimestamp();
+			outLatencies.add(outLatency);
+			
 			logEntry.e2eLatency = latency;
+			logEntry.outLatency = outLatency;
 		}
 
 		//update processing latencies
@@ -198,6 +210,7 @@ public class Stats {
 		processingLatencies.add(internalLatency);
 
 		logEntry.processingLatency = internalLatency;
+		logEntry.inLatency = latestContributingInEventTimestamp - latestContributingInternalTimestamp;
 	}
 
 	private void updateInEventMetrics(Event event, long timestamp){
@@ -238,10 +251,10 @@ public class Stats {
 		PrintWriter writer = new PrintWriter(path);
 		
 		if(printHeader){
-			writer.println("timestamp,eventName,eventId,end-to-end latency, processing latency");
+			writer.println("timestamp,eventName,eventId,end-to-end latency, input latency, processing latency, output latency");
 		}
 		for (EventLogEntry logEntry : eventLog) {
-			writer.printf("%d,%s,%s,%d,%d\n", logEntry.timestamp, logEntry.eventName, logEntry.eventId, logEntry.e2eLatency, logEntry.processingLatency);
+			writer.printf("%d,%s,%s,%d,%d,%d,%d\n", logEntry.timestamp, logEntry.eventName, logEntry.eventId, logEntry.e2eLatency, logEntry.inLatency, logEntry.processingLatency, logEntry.outLatency);
 		}
 		
 		writer.close();
@@ -343,6 +356,7 @@ public class Stats {
 			logEntry.e2eLatency = e2elatency;
 			logEntry.processingLatency = e2elatency;
 			logEntry.timestamp = inTimestamp;
+			logEntry.outLatency = timestamp - detectedTime;
 		}
 		
 	}
@@ -399,6 +413,7 @@ public class Stats {
 				System.out.println(String.format("%s: %d ms", type, stats.getPerTypeLatency(type, percentile)));
 			}
 			System.out.println(String.format("%.1f%% Input phase latency: %d ms", percentile * 100, stats.getInLatency(percentile)));
+			System.out.println(String.format("%.1f%% Output phase latency: %d ms", percentile * 100, stats.getOutLatency(percentile)));
 			System.out.println(String.format("Num of input events: %d, average rate: %f events/sec", stats.numOfInEvents, stats.getAvgInRate() ));
 			
 			
