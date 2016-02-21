@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,11 +26,20 @@ import org.speedd.kafka.JsonEventDecoder;
 import org.speedd.traffic.TrafficAggregatedReadingCsv2Event;
 
 public class Stats {
+	private static class EventLogEntry {
+		public long timestamp;
+		public String eventName;
+		public String eventId;
+		public long processingLatency;
+		public long e2eLatency;
+	}
+	
 	public static final String USAGE = "USAGE: stats -p <percentile> [-s <start offset timestamp>] [-f <file>]";
 	private static final String OPTION_PERCENTILE = "p";
 	private static final String OPTION_IN_FILE = "f";
 	private static final String OPTION_START_OFFSET = "s";
 	private static final String OPTION_USE_CASE = "c";
+	private static final String OPTION_DUMP_LOG = "l";
 	
 	private ArrayList<Long> e2eLatencies;
 	
@@ -50,6 +60,10 @@ public class Stats {
 	private EventMetadata eventMetadata;
 	
 	private HashMap<String, ArrayList<Long>> e2eLatenciesPerType;
+
+	private ArrayList<EventLogEntry> eventLog;
+	
+	private HashMap<String, EventLogEntry> eventLogMap;
 	
 	protected EventMetadata getEventMetadata() {
 		return eventMetadata;
@@ -145,6 +159,9 @@ public class Stats {
 		
 		ArrayList<Long> e2eLatenciesForType = getE2ELatenciesForType(event);
 		
+		EventLogEntry logEntry = getEventLogEntry(event);
+		logEntry.timestamp = eventTimestamp;
+		
 		long latestContributingInEventTimestamp = 0;
 		
 		for(int i=contributingEvents.length-1; i>=0; --i){
@@ -156,11 +173,14 @@ public class Stats {
 			}
 		}
 
+		
 		if(latestContributingInEventTimestamp > 0){
 			Long latency = eventTimestamp - latestContributingInEventTimestamp;
 			
 			e2eLatencies.add(latency);
 			e2eLatenciesForType.add(latency);
+			
+			logEntry.e2eLatency = latency;
 		}
 
 		//update processing latencies
@@ -176,7 +196,8 @@ public class Stats {
 		
 		Long internalLatency = internalTimestamp - latestContributingInternalTimestamp;
 		processingLatencies.add(internalLatency);
-		
+
+		logEntry.processingLatency = internalLatency;
 	}
 
 	private void updateInEventMetrics(Event event, long timestamp){
@@ -213,6 +234,19 @@ public class Stats {
 		return str != null && str.trim().startsWith("{");
 	}
 	
+	private void dumpLog(String path, boolean printHeader) throws IOException {
+		PrintWriter writer = new PrintWriter(path);
+		
+		if(printHeader){
+			writer.println("timestamp,eventName,eventId,end-to-end latency, processing latency");
+		}
+		for (EventLogEntry logEntry : eventLog) {
+			writer.printf("%d,%s,%s,%d,%d\n", logEntry.timestamp, logEntry.eventName, logEntry.eventId, logEntry.e2eLatency, logEntry.processingLatency);
+		}
+		
+		writer.close();
+	}
+	
 	protected void computeStats(InputStream eventStream) throws IOException {
 		BufferedReader reader = new BufferedReader(new InputStreamReader(eventStream));
 		
@@ -227,6 +261,10 @@ public class Stats {
 		outLatencies = new ArrayList<Long>();
 		
 		e2eLatenciesPerType = new HashMap<String, ArrayList<Long>>();
+		
+		eventLog = new ArrayList<EventLogEntry>();
+		
+		eventLogMap = new HashMap<>();
 		
 		JsonEventDecoder decoder = new JsonEventDecoder();
 		
@@ -273,6 +311,20 @@ public class Stats {
 		}
 	}
 	
+	private EventLogEntry getEventLogEntry(Event event){
+		String eventId = getEventId(event);
+		EventLogEntry entry = eventLogMap.get(eventId);
+		
+		if(entry == null){
+			entry = new EventLogEntry();
+			entry.eventId = eventId;
+			entry.eventName = event.getEventName();
+			eventLog.add(entry);
+		}
+		
+		return entry;
+	}
+	
 	private void updateLatenciesForRawEvents(Event event, long timestamp) {
 		//Only input latency is known for raw events - their detected time is set during deserialization in kafka spout
 		long detectedTime = event.getTimestamp();
@@ -281,9 +333,18 @@ public class Stats {
 		
 		ArrayList<Long> e2eLatenciesForType = getE2ELatenciesForType(event);
 		Long inTimestamp = timestamps.get(getEventId(event));
+		
+		
 		if(inTimestamp != null){
-			e2eLatenciesForType.add(timestamp - inTimestamp);
+			Long e2elatency = timestamp - inTimestamp;
+			e2eLatenciesForType.add(e2elatency);
+
+			EventLogEntry logEntry = getEventLogEntry(event);
+			logEntry.e2eLatency = e2elatency;
+			logEntry.processingLatency = e2elatency;
+			logEntry.timestamp = inTimestamp;
 		}
+		
 	}
 
 	public long getNumOfInEvents(){
@@ -297,6 +358,7 @@ public class Stats {
 		options.addOption(Option.builder(OPTION_IN_FILE).hasArg().build());
 		options.addOption(Option.builder(OPTION_START_OFFSET).required(false).hasArg().build());
 		options.addOption(Option.builder(OPTION_USE_CASE).required(false).hasArg().build());
+		options.addOption(Option.builder(OPTION_DUMP_LOG).hasArg().build());
 
 		try {
 			CommandLineParser clParser = new DefaultParser();
@@ -338,6 +400,12 @@ public class Stats {
 			}
 			System.out.println(String.format("%.1f%% Input phase latency: %d ms", percentile * 100, stats.getInLatency(percentile)));
 			System.out.println(String.format("Num of input events: %d, average rate: %f events/sec", stats.numOfInEvents, stats.getAvgInRate() ));
+			
+			
+			if(cmd.hasOption(OPTION_DUMP_LOG)){
+				String path = cmd.getOptionValue(OPTION_DUMP_LOG);
+				stats.dumpLog(path, true);
+			}
 			
 		} catch (ParseException pe){
 			System.err.println(pe.getMessage());
