@@ -99,7 +99,6 @@ public class Analyzer {
         props.put("zookeeper.session.timeout.ms", "400");
         props.put("zookeeper.sync.time.ms", "200");
         props.put("auto.commit.interval.ms", "1000");
-        props.put("fetch.min.bytes", 1);
  
         return new ConsumerConfig(props);
     }
