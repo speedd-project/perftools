@@ -113,7 +113,7 @@ public class Analyzer {
     	
     	Map<String, List<KafkaStream<byte[], byte[]>>> consumerMap = consumer.createMessageStreams(topicCountMap);
 
-        executor = Executors.newFixedThreadPool(topics.length * threadsPerTopic);
+        executor = Executors.newFixedThreadPool(topics.length * threadsPerTopic + 1);
         
         queue = new ConcurrentLinkedQueue<String>();
         

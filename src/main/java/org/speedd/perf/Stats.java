@@ -219,7 +219,7 @@ public class Stats {
 		processingLatencies.add(internalLatency);
 
 		logEntry.processingLatency = internalLatency;
-		logEntry.inLatency = latestContributingInEventTimestamp - latestContributingInternalTimestamp;
+		logEntry.inLatency = latestContributingInternalTimestamp - latestContributingInEventTimestamp;
 	}
 
 	private void updateInEventMetrics(Event event, long timestamp){
