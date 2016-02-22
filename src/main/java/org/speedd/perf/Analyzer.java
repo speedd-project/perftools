@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -33,16 +34,38 @@ public class Analyzer {
 	private String[] topics;
 	private int threadsPerTopic;
 	private ExecutorService executor;
+	private ConcurrentLinkedQueue<String> queue;
+	
+	private static class EventWriter implements Runnable {
+		private ConcurrentLinkedQueue<String> printQueue;
+		public EventWriter(ConcurrentLinkedQueue<String> printQueue) {
+			this.printQueue = printQueue;
+		}
+		@Override
+		public void run() {
+			while(true){
+				for (String nextRecord : printQueue) {
+					System.out.println(nextRecord);
+				}
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+				}
+			}
+		}	
+	}
 	
 	private static class EventRecorder implements Runnable {
 		private KafkaStream stream;
 		private int threadId;
 		private String topic;
+		private ConcurrentLinkedQueue<String> printQueue;
 		
-		public EventRecorder(String topic, KafkaStream stream, int threadId) {
+		public EventRecorder(String topic, KafkaStream stream, int threadId, ConcurrentLinkedQueue<String> printQueue) {
 			this.stream = stream;
 			this.threadId = threadId;
 			this.topic = topic;
+			this.printQueue = printQueue;
 		}
 
 		@Override
@@ -53,7 +76,9 @@ public class Analyzer {
 	        while (it.hasNext()) {
 	        	long timestamp = System.currentTimeMillis();
 	        	String message = new String(it.next().message());
-	        	System.out.println(timestamp + ":" + message);
+//	        	System.out.println(timestamp + ":" + message);
+	        	printQueue.add(message);
+	        	
 	        }
 	            
 	        System.err.println("Shutting down thread: " + threadId + " for topic " + topic);
@@ -74,6 +99,7 @@ public class Analyzer {
         props.put("zookeeper.session.timeout.ms", "400");
         props.put("zookeeper.sync.time.ms", "200");
         props.put("auto.commit.interval.ms", "1000");
+        props.put("fetch.min.bytes", 1);
  
         return new ConsumerConfig(props);
     }
@@ -88,6 +114,10 @@ public class Analyzer {
     	Map<String, List<KafkaStream<byte[], byte[]>>> consumerMap = consumer.createMessageStreams(topicCountMap);
 
         executor = Executors.newFixedThreadPool(topics.length * threadsPerTopic);
+        
+        queue = new ConcurrentLinkedQueue<String>();
+        
+        executor.submit(new EventWriter(queue));
 
     	for (String topic : topics) {
             List<KafkaStream<byte[], byte[]>> streams = consumerMap.get(topic);
@@ -95,11 +125,11 @@ public class Analyzer {
             int threadId = 0;
             
             for (KafkaStream<byte[], byte[]> stream : streams) {
-				executor.submit(new EventRecorder(topic, stream, threadId));
+				executor.submit(new EventRecorder(topic, stream, threadId, queue));
 				threadId++;
 			}
 		}
- 
+    	
     }
     
 	public static void main(String[] args) {

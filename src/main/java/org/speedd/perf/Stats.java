@@ -171,13 +171,16 @@ public class Stats {
 		logEntry.timestamp = eventTimestamp;
 		
 		long latestContributingInEventTimestamp = 0;
-		
+
 		for(int i=contributingEvents.length-1; i>=0; --i){
 			String eventId = (String)contributingEvents[i];
 			
 			if(timestamps.containsKey(eventId)){
-				latestContributingInEventTimestamp = timestamps.get(eventId);
-				break;
+				long inEventTimestamp = timestamps.get(eventId);
+				
+				if(inEventTimestamp > latestContributingInEventTimestamp){
+					latestContributingInEventTimestamp = inEventTimestamp;
+				}
 			}
 		}
 
@@ -198,12 +201,18 @@ public class Stats {
 		//update processing latencies
 		long internalTimestamp = event.getTimestamp();
 		Object[] contributingTimestamps = (Object[])event.getAttributes().get("timestamps");
-		Object latestContributingTimestampObject = contributingTimestamps[contributingTimestamps.length-1];
-		long latestContributingInternalTimestamp;
-		if(latestContributingTimestampObject instanceof String){
-			latestContributingInternalTimestamp = Long.parseLong((String)latestContributingTimestampObject);
-		} else {
-			latestContributingInternalTimestamp = (Long)latestContributingTimestampObject;
+		
+		long latestContributingInternalTimestamp = 0;
+		long contributingTs = 0;
+		for (Object latestContributingTimestampObject : contributingTimestamps) {
+			if(latestContributingTimestampObject instanceof String){
+				contributingTs = Long.parseLong((String)latestContributingTimestampObject);
+			} else {
+				contributingTs = (Long)latestContributingTimestampObject;
+			}
+			if(contributingTs > latestContributingInternalTimestamp){
+				latestContributingInternalTimestamp = contributingTs;
+			}
 		}
 		
 		Long internalLatency = internalTimestamp - latestContributingInternalTimestamp;
