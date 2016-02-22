@@ -44,12 +44,13 @@ public class Analyzer {
 		@Override
 		public void run() {
 			while(true){
-				for (String nextRecord : printQueue) {
+				String nextRecord = printQueue.poll();
+				if(nextRecord != null){
 					System.out.println(nextRecord);
-				}
-				try {
-					Thread.sleep(100);
-				} catch (InterruptedException e) {
+				} else {
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {}
 				}
 			}
 		}	
