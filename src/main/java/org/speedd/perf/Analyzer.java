@@ -77,9 +77,9 @@ public class Analyzer {
 	        while (it.hasNext()) {
 	        	long timestamp = System.currentTimeMillis();
 	        	String message = new String(it.next().message());
-//	        	System.out.println(timestamp + ":" + message);
-	        	printQueue.add(message);
 	        	
+//	        	System.out.println(timestamp + ":" + message);
+	        	printQueue.add(String.format("%d:%s", timestamp, message));
 	        }
 	            
 	        System.err.println("Shutting down thread: " + threadId + " for topic " + topic);
