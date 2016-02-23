@@ -74,10 +74,10 @@ public class TransactionEventGenerator implements Constants {
 
 	private static final String[] uniqueAttrs = new String[] {
 			ATTR_TRANSACTION_ID,
-			ATTR_CARD_PAN//,
-			//ATTR_TERMINAL_ID,
-			//ATTR_ACQUIRER_COUNTRY,
-			//ATTR_CARD_COUNTRY
+			ATTR_CARD_PAN,
+			ATTR_TERMINAL_ID,
+			ATTR_ACQUIRER_COUNTRY,
+			ATTR_CARD_COUNTRY
 	};
 
 	private static final HashMap<String, String> uniqueAttrMap = new HashMap<String, String>(
